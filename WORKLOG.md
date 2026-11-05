@@ -67,6 +67,15 @@
 - 중심부에 **대형 카운트다운 숫자(5 → 4 → 3 → 2 → 1)** 및 다음 일과 안내 배너 표시
 - 전환 완료(0초 도달) 시 자연스럽게 정상 다이얼로 복귀
 
+### 8) 모바일 최적화, PWA 바로가기 전용 아이콘 및 미작동 기능 정리 (SDD 009)
+- **크롬 바로가기 & PWA 전용 아이콘**: 고해상도 벡터 SVG 브랜드 아이콘(`public/icon.svg`) 및 `manifest.webmanifest` 탑재로 바탕화면/홈 화면 바로가기 생성 시 선명한 원형 다이얼 아이콘 노출
+- **미작동/불필요 기능 완전 제거**:
+  - 모바일 및 미지원 브라우저에서 클릭 불가 상태였던 `[최상단 플로팅 뷰]` 버튼 및 `PiP Ready` 배지 완전 삭제
+  - 헤더의 `[환경설정 F1]` 버튼 삭제 (데스크톱 `F1` 핫키만 백그라운드 유지)
+  - 상단 헤더를 브랜드 로고 + `☀️ 12H / 🌙 24H` 토글 버튼만 남겨 극도로 심플하게 정돈
+- **유연한 반응형 다이얼**: 고정 px 대신 `min(90vw, 420px)` 반응형으로 360px 모바일 화면에서도 가로 스크롤/짤림 없이 1:1 정비율 렌더링
+- **터치 친화 인터랙션**: 마우스 호버 대신 일과 호(Arc)를 터치(탭)하면 +10px 돌출 및 상세 카드 표시, 재터치 시 닫히는 토글 로직 구현
+
 ---
 
 ## 💾 3. 데이터 저장 및 보안 아키텍처 (Storage & Security)
@@ -110,16 +119,17 @@ DailyClock은 서버리스 기반의 **오프라인 우선(Local-First)** 아키
 | [`006`](./docs/design-docs/006-block-edit-and-themes.md) | 일과 블록 인라인 수정 및 실시간 테마 명세 | Proposed | - |
 | [`007`](./docs/design-docs/007-transition-countdown-spec.md) | 일과 전환 5초 전 전체 레이아웃 카운트다운 명세 | **Approved** | 위승 (2026-11-05) |
 | [`008`](./docs/design-docs/008-google-auto-sync-spec.md) | 구글 캘린더 화면 활성화 기반 30분 자동 동기화 명세 | Proposed | - |
+| [`009`](./docs/design-docs/009-mobile-optimization-spec.md) | 모바일/PWA 최적화, 바로가기 아이콘 및 미작동 기능 제거 명세 | **Approved** | 위승 (2026-11-05) |
 
 ---
 
 ## 🧪 5. 테스트 및 품질 지표 (TDD & Taste as Code)
 
 - **테스트 러너**: Vitest v3.2.7 (React Testing Library + JSDOM)
-- **전체 단위/통합 테스트**: **33개 통과 (0건 실패)**
+- **전체 단위/통합 테스트**: **34개 통과 (0건 실패)**
   - `src/core/dial.test.ts` (18개 테스트): 각도 계산, 12시간/24시간 좌표 변환, 자정 래핑, 5초 전환 감지 등
   - `src/services/googleSync.test.ts` (7개 테스트): Strict Read-Only API 단언, Calendar/Tasks 파서 정확성
-  - `src/components/ClockDial.test.tsx` (8개 테스트): 단일 바늘 불변식(초/분침 배제), 중앙 시계, 눈금 수, 호버 인터랙션, 5초 카운트다운 UI
+  - `src/components/ClockDial.test.tsx` (9개 테스트): 단일 바늘 불변식(초/분침 배제), 중앙 시계, 눈금 수, 호버 인터랙션, 터치 탭 토글, 5초 카운트다운 UI
 - **프로덕션 빌드**: `tsc && vite build` 정상 완료 (TypeScript 0 오류)
 
 ---

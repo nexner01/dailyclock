@@ -12,7 +12,8 @@ import {
 interface ClockDialProps {
   currentTime: Date;
   blocks?: RoutineBlock[];
-  size?: number; // 기본 400
+  size?: number | string;
+  className?: string;
   showHourNumbers?: boolean;
   dialMode?: '24h' | '12h'; // 기본 '12h'
   twelveHourStart?: number;  // 12시간 모드 주간 시작 시각 (기본 8)
@@ -22,11 +23,13 @@ interface ClockDialProps {
  * 원형 다이얼 SVG 컴포넌트
  * - 피드백 반영: 화살촉을 중앙 원(r=90)부터 일과 칸(r=114)까지 30px 길이로 시원하게 길게 뻗은
  *   '롱 쉐브론 화살표(Long Arrow Dart)'로 업그레이드하여 압도적인 시인성과 세련미 제공
+ * - 모바일 터치(Tap) 토글 지원 및 반응형 SVG 지원
  */
 export const ClockDial: React.FC<ClockDialProps> = ({
   currentTime,
   blocks = [],
-  size = 400,
+  size = '100%',
+  className = '',
   showHourNumbers = true,
   dialMode = '12h',
   twelveHourStart = 8,
@@ -123,12 +126,12 @@ export const ClockDial: React.FC<ClockDialProps> = ({
   const degreesPerMark = 360 / totalHourMarks;
 
   return (
-    <div className={`relative flex items-center justify-center p-2 select-none transition-all duration-300 ${transitionInfo ? 'scale-105' : ''}`}>
+    <div className={`relative flex items-center justify-center p-2 select-none transition-all duration-300 w-full h-full ${transitionInfo ? 'scale-105' : ''}`}>
       <svg
         viewBox="0 0 400 400"
         width={size}
         height={size}
-        className="drop-shadow-2xl transition-all duration-300"
+        className={`drop-shadow-2xl transition-all duration-300 ${className}`}
       >
         <defs>
           {/* 다이얼 배경 그라데이션 */}
@@ -178,7 +181,8 @@ export const ClockDial: React.FC<ClockDialProps> = ({
           stroke={transitionInfo ? '#f59e0b' : '#334155'}
           strokeWidth={transitionInfo ? '4' : '3'}
           filter={transitionInfo ? 'url(#transitionPulseGlow)' : undefined}
-          className="transition-all duration-300"
+          className="transition-all duration-300 cursor-pointer"
+          onClick={() => setHoveredArc(null)}
         />
 
         {/* 루틴 호(Arc) 영역 배경 트랙 */}
@@ -202,12 +206,20 @@ export const ClockDial: React.FC<ClockDialProps> = ({
               stroke={isHovered ? '#ffffff' : '#090d16'}
               strokeWidth={isHovered ? 2.5 : 1.5}
               filter={isHovered ? 'url(#arcHoverGlow)' : undefined}
-              className="transition-all duration-200 cursor-pointer"
+              className="transition-all duration-200 cursor-pointer select-none"
               style={{
                 opacity: hoveredArc ? (isHovered ? 1 : 0.45) : 1,
               }}
               onMouseEnter={() => setHoveredArc(arc)}
               onMouseLeave={() => setHoveredArc(null)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setHoveredArc((prev) =>
+                  prev && prev.startAngle === arc.startAngle && prev.endAngle === arc.endAngle
+                    ? null
+                    : arc
+                );
+              }}
             />
           );
         })}
@@ -297,7 +309,8 @@ export const ClockDial: React.FC<ClockDialProps> = ({
           fill="url(#centerCore)"
           stroke={transitionInfo ? '#f59e0b' : '#334155'}
           strokeWidth={transitionInfo ? '3' : '2'}
-          className="drop-shadow-lg transition-all duration-300"
+          className="drop-shadow-lg transition-all duration-300 cursor-pointer"
+          onClick={() => setHoveredArc(null)}
         />
 
         {/* 5. [사용자 제안 반영] 길쭉하고 시원하게 뻗은 롱 화살표 (Long Arrow Dart) */}

@@ -81,6 +81,22 @@ describe('<ClockDial /> Component - Taste as Code Invariants & SDD 005 & SDD 007
     expect(screen.getByTestId('center-digital-clock')).toBeInTheDocument();
   });
 
+  it('일과 칸(호)을 클릭/터치하면 상세 정보가 토글되어야 한다 (SDD 009 모바일 터치)', () => {
+    render(<ClockDial currentTime={new Date(2026, 10, 5, 14, 30, 15)} blocks={dummyBlocks} />);
+    
+    const arcPath = screen.getByTestId('routine-arc-0');
+
+    // 1회 클릭 -> 상세 카드 표시
+    fireEvent.click(arcPath);
+    expect(screen.getByTestId('hovered-block-detail')).toBeInTheDocument();
+    expect(screen.getByTestId('hovered-block-detail').textContent).toContain('집중 업무');
+
+    // 동일 호 2회 클릭 -> 상세 해제되고 시계 복귀
+    fireEvent.click(arcPath);
+    expect(screen.queryByTestId('hovered-block-detail')).toBeNull();
+    expect(screen.getByTestId('center-digital-clock')).toBeInTheDocument();
+  });
+
   it('일과 시작 5초 전부터 중앙에 카운트다운이 표시되어야 한다 (SDD 007)', () => {
     // 09:00:00 시작 4초 전인 08:59:56
     render(<ClockDial currentTime={new Date(2026, 10, 5, 8, 59, 56)} blocks={dummyBlocks} />);

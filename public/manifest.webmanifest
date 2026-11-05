@@ -1,0 +1,23 @@
+{
+  "name": "DailyClock - 24H 원형 루틴 시계",
+  "short_name": "DailyClock",
+  "description": "하루 24시간 및 12시간 아날로그 원형 생활계획표 & 단일 시침 트래커",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

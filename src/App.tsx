@@ -1,12 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { useClockStore } from './store/useClockStore';
 import { ClockDial } from './components/ClockDial';
 import { SettingsModal } from './components/SettingsModal';
-import { useDocumentPiP } from './hooks/useDocumentPiP';
 import {
-  ExternalLink,
-  Settings as SettingsIcon,
   Sparkles,
   CalendarDays,
   CheckCircle2,
@@ -25,15 +21,6 @@ export const App: React.FC = () => {
     googleBlocks,
     updateSettings,
   } = useClockStore();
-
-  // F1 단축키 콜백 등록을 포함한 Document PiP 훅
-  const { isSupported, isPiPActive, pipWindow, requestPiP, closePiP } = useDocumentPiP({
-    width: 340,
-    height: 340,
-    onF1Press: () => {
-      setIsSettingsOpen(true);
-    },
-  });
 
   // 데이터베이스 초기화
   useEffect(() => {
@@ -105,49 +92,21 @@ export const App: React.FC = () => {
             24
           </div>
           <div>
-            <h1 className="font-bold text-base tracking-wide text-slate-100 flex items-center gap-1.5">
+            <h1 className="font-bold text-base tracking-wide text-slate-100">
               DailyClock
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">
-                PiP Ready
-              </span>
             </h1>
-            <p className="text-[11px] text-slate-400">24시간 원형 일과표 & 시침</p>
+            <p className="text-[11px] text-slate-400">24시간 원형 일과표 &amp; 시침</p>
           </div>
         </div>
 
-        {/* 액션 버튼 그룹 */}
+        {/* 액션 버튼: 12H / 24H 모드 빠른 토글 버튼 */}
         <div className="flex items-center gap-2">
-          {/* 12H / 24H 모드 빠른 토글 버튼 */}
           <button
             onClick={() => updateSettings({ dialMode: settings.dialMode === '12h' ? '24h' : '12h' })}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 flex items-center gap-1 transition-colors"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 flex items-center gap-1 transition-colors shadow-sm"
             title="12시간 주간 모드 / 24시간 모드 전환"
           >
             {settings.dialMode === '12h' ? '☀️ 12H 주간 모드' : '🌙 24H 전체 모드'}
-          </button>
-
-          {/* Always on Top 플로팅 버튼 */}
-          <button
-            onClick={isPiPActive ? closePiP : requestPiP}
-            disabled={!isSupported}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
-              isPiPActive
-                ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
-            } disabled:opacity-40 disabled:cursor-not-allowed`}
-            title={isSupported ? '화면 최상단 플로팅 윈도우 열기' : '이 브라우저는 Document PiP를 지원하지 않습니다'}
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            {isPiPActive ? '플로팅 창 닫기' : '최상단 플로팅 뷰'}
-          </button>
-
-          {/* 환경설정 버튼 (F1) */}
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
-          >
-            <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
-            환경설정 <kbd className="text-[10px] bg-slate-900 px-1 py-0.5 rounded text-slate-400">F1</kbd>
           </button>
         </div>
       </header>
@@ -175,12 +134,12 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* 24시간 / 12시간 원형 다이얼 차트 */}
-        <div className="relative">
+        {/* 24시간 / 12시간 원형 다이얼 차트 (반응형 규격) */}
+        <div className="w-full max-w-[min(90vw,420px)] aspect-square flex items-center justify-center relative">
           <ClockDial
             currentTime={currentTime}
             blocks={blocks}
-            size={380}
+            className="w-full h-full max-w-full max-h-full"
             dialMode={settings.dialMode}
             twelveHourStart={settings.twelveHourStart}
           />
@@ -205,31 +164,13 @@ export const App: React.FC = () => {
         </div>
       </main>
 
-      {/* 하단 단축키 가이드 */}
-      <footer className="text-center text-xs text-slate-500 py-1">
-        단축키 <kbd className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded font-mono text-slate-400">F1</kbd> 환경설정
-        &nbsp;|&nbsp; 24시간 단일 시침 인디케이터 &nbsp;|&nbsp; Chromium Document PiP 지원
+      {/* 하단 푸터 */}
+      <footer className="text-center text-xs text-slate-500 py-2">
+        DailyClock · 24H &amp; 12H Circular Routine Tracker
       </footer>
 
       {/* 환경설정 모달 */}
       <SettingsModal />
-
-      {/* Document PiP 플로팅 창 렌더링 (헤더/버튼 없이 시계만 100% 렌더링) */}
-      {isPiPActive &&
-        pipWindow &&
-        createPortal(
-          <div className="w-full h-full flex items-center justify-center bg-slate-950 p-0 m-0 overflow-hidden">
-            <ClockDial
-              currentTime={currentTime}
-              blocks={blocks}
-              size={320}
-              showHourNumbers={true}
-              dialMode={settings.dialMode}
-              twelveHourStart={settings.twelveHourStart}
-            />
-          </div>,
-          pipWindow.document.body
-        )}
     </div>
   );
 };
