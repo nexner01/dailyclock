@@ -69,7 +69,36 @@
 
 ---
 
-## 📑 3. 기능 설계 명세서 (SDD) 현황
+## 💾 3. 데이터 저장 및 보안 아키텍처 (Storage & Security)
+
+DailyClock은 서버리스 기반의 **오프라인 우선(Local-First)** 아키텍처를 따르며, 사용자의 모든 데이터는 브라우저 내부 로컬 데이터베이스에만 영구 저장됩니다.
+
+### 1) 저장소 구조 (`src/db/index.ts`)
+* **엔진**: 브라우저 표준 로컬 데이터베이스 **`IndexedDB`** ([`Dexie.js`](file:///d:/Workspace/3.%20실습/BIz/dailyclock/src/db/index.ts) 라이브러리 사용)
+* **데이터베이스 이름**: `DailyClockDB` (버전 1)
+* **테이블 구성**:
+  1. **`settings` 테이블** (단일 레코드, Key: `'current'`): 환경설정 및 사용자 옵션 저장
+  2. **`presets` 테이블** (다중 레코드, Key: `id`): 생활계획표 템플릿 및 블록 목록 저장
+
+### 2) 환경설정(`settings`) 저장 항목 상세
+| 필드명 | 타입 | 설명 | 기본값 |
+| :--- | :--- | :--- | :--- |
+| **`googleClientId`** | `string` | Google OAuth Client ID (항상 마스킹 처리되어 보관) | `""` |
+| **`dialMode`** | `'12h' \| '24h'` | 시계 다이얼 모드 (물리 아날로그 12시간 / 전체 24시간) | `'12h'` |
+| **`calendarSource`** | `'local' \| 'google' \| 'both'` | 캘린더 소스 (자체 일과 / 구글 캘린더 / 병합 뷰) | `'local'` |
+| **`twelveHourStart`** | `number` | 12시간 모드 주간 시작 시각 (클리핑 기준) | `8` (오전 8시) |
+| **`activePresetId`** | `string` | 현재 활성화된 생활계획표 템플릿 ID | `'preset-weekday'` |
+| **`theme`** | `'dark' \| 'light' \| 'system'` | UI 테마 모드 | `'dark'` |
+| **`colorPalette`** | `'default' \| 'pastel' \| 'neon' \| 'ocean'` | 일과표 컬러 팔레트 | `'default'` |
+
+### 3) 보안 및 영구성
+* **외부 서버 전송 전무**: 사용자의 Client ID, 일정, 루틴 정보는 일체 외부 백엔드로 전송되지 않고 로컬 PC 브라우저에만 남습니다.
+* **영구 보존**: 브라우저를 닫거나 컴퓨터를 재부팅해도 IndexedDB에 데이터가 안전하게 유지됩니다.
+* **직접 확인 방법**: 브라우저 `F12` 개발자 도구 → `애플리케이션(Application)` 탭 → `스토리지(Storage)` → `IndexedDB` → `DailyClockDB`에서 실시간 열람 가능합니다.
+
+---
+
+## 📑 4. 기능 설계 명세서 (SDD) 현황
 
 | 문서 번호 | 명세서 명칭 | 상태 | 승인자 |
 | :--- | :--- | :---: | :---: |
@@ -84,7 +113,7 @@
 
 ---
 
-## 🧪 4. 테스트 및 품질 지표 (TDD & Taste as Code)
+## 🧪 5. 테스트 및 품질 지표 (TDD & Taste as Code)
 
 - **테스트 러너**: Vitest v3.2.7 (React Testing Library + JSDOM)
 - **전체 단위/통합 테스트**: **33개 통과 (0건 실패)**
@@ -95,7 +124,7 @@
 
 ---
 
-## 🚀 5. Git & GitHub 형상 관리
+## 🚀 6. Git & GitHub 형상 관리
 
 - **로컬 저장소 초기화**: `.gitignore` 설정 (빌드 산출물, 의존성 제외) 및 첫 커밋 완료
 - **원격 저장소**: GitHub Private Repository 푸시 완료
