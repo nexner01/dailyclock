@@ -1,7 +1,7 @@
 # DailyClock 작업 내역 보고서 (Worklog & Implementation History)
 
-**최종 업데이트**: 2026-11-05  
-**버전**: v0.1.0  
+**최종 업데이트**: 2026-11-06  
+**버전**: v0.1.1  
 **GitHub 저장소**: [nexner01/dailyclock (Private)](https://github.com/nexner01/dailyclock)  
 **기술 스택**: React 19, TypeScript, Vite, Tailwind CSS v4, Dexie.js (IndexedDB), Vitest, Lucide-react, Document Picture-in-Picture API  
 
@@ -76,6 +76,18 @@
 - **유연한 반응형 다이얼**: 고정 px 대신 `min(90vw, 420px)` 반응형으로 360px 모바일 화면에서도 가로 스크롤/짤림 없이 1:1 정비율 렌더링
 - **터치 친화 인터랙션**: 마우스 호버 대신 일과 호(Arc)를 터치(탭)하면 +10px 돌출 및 상세 카드 표시, 재터치 시 닫히는 토글 로직 구현
 
+### 9) 12시간 주간/야간 일과표 선택 및 야간 일과 입력 (SDD 010)
+- **주간/야간 자동 전환 & 빈값 보장**:
+  - 주간(08:00~20:00)에는 주간 일과표, 야간(20:00~08:00)에는 야간 일과표로 자동 전환
+  - 야간 시간대에 등록된 일정이 없는 경우, 다이얼에 일과 호를 일절 그리지 않고 깨끗한 빈 다이얼(`[]`)로 보장
+- **일과표 메인 화면 낮(☀️)/밤(🌙) 아이콘 선택**:
+  - 12시간 모드 시계 화면 상단에 `[☀️ 낮 (08~20시)]` 및 `[🌙 밤 (20~08시)]` 캡슐형 아이콘 버튼 배치
+  - 현재 시각 기준 자동 전환 외에도 언제든 원하는 시간표를 즉시 교체하여 열람 가능
+- **환경설정(SettingsModal) 야간 시간표 분리 입력**:
+  - `자체 일과표 관리` 탭 내에 `[전체 (24H)]`, `[☀️ 주간]`, `[🌙 야간]` 필터 및 입력 세그먼트 신설
+  - `[🌙 야간]` 선택 시 시작/종료 시각 기본값(`20:00` ~ `23:00`) 추천 및 야간 블록 필터링
+  - 등록된 야간 블록이 없을 시 빈 일과표 안내 문구 제공
+
 ---
 
 ## 💾 3. 데이터 저장 및 보안 아키텍처 (Storage & Security)
@@ -120,16 +132,17 @@ DailyClock은 서버리스 기반의 **오프라인 우선(Local-First)** 아키
 | [`007`](./docs/design-docs/007-transition-countdown-spec.md) | 일과 전환 5초 전 전체 레이아웃 카운트다운 명세 | **Approved** | 위승 (2026-11-05) |
 | [`008`](./docs/design-docs/008-google-auto-sync-spec.md) | 구글 캘린더 화면 활성화 기반 30분 자동 동기화 명세 | Proposed | - |
 | [`009`](./docs/design-docs/009-mobile-optimization-spec.md) | 모바일/PWA 최적화, 바로가기 아이콘 및 미작동 기능 제거 명세 | **Approved** | 위승 (2026-11-05) |
+| [`010`](./docs/design-docs/010-day-night-12h-cycle-spec.md) | 12시간 모드 주간/야간 일과표 선택 및 환경설정 입력 명세 | **Approved** | 위승 (2026-11-06) |
 
 ---
 
 ## 🧪 5. 테스트 및 품질 지표 (TDD & Taste as Code)
 
 - **테스트 러너**: Vitest v3.2.7 (React Testing Library + JSDOM)
-- **전체 단위/통합 테스트**: **34개 통과 (0건 실패)**
-  - `src/core/dial.test.ts` (18개 테스트): 각도 계산, 12시간/24시간 좌표 변환, 자정 래핑, 5초 전환 감지 등
+- **전체 단위/통합 테스트**: **45개 전체 통과 (0건 실패)**
+  - `src/core/dial.test.ts` (26개 테스트): 각도 계산, 12H/24H 좌표 변환, 주간/야간 자동 판별, 야간 윈도우 교차 및 빈값 보장, 자정 래핑, 5초 전환 감지 등
   - `src/services/googleSync.test.ts` (7개 테스트): Strict Read-Only API 단언, Calendar/Tasks 파서 정확성
-  - `src/components/ClockDial.test.tsx` (9개 테스트): 단일 바늘 불변식(초/분침 배제), 중앙 시계, 눈금 수, 호버 인터랙션, 터치 탭 토글, 5초 카운트다운 UI
+  - `src/components/ClockDial.test.tsx` (12개 테스트): 단일 바늘 불변식(초/분침 배제), 중앙 시계, 12H/24H 눈금, 야간 빈값 다이얼 보장, 낮/밤 모드 지정 렌더링, 호버 인터랙션, 터치 탭 토글, 5초 카운트다운 UI
 - **프로덕션 빌드**: `tsc && vite build` 정상 완료 (TypeScript 0 오류)
 
 ---

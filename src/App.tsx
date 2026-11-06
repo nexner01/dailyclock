@@ -1,12 +1,20 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useClockStore } from './store/useClockStore';
 import { ClockDial } from './components/ClockDial';
 import { SettingsModal } from './components/SettingsModal';
+import { useDocumentPiP } from './hooks/useDocumentPiP';
 import {
   Sparkles,
   CalendarDays,
   CheckCircle2,
+  Sun,
+  Moon,
+  Settings,
+  RotateCcw,
+  ExternalLink,
 } from 'lucide-react';
+import { getAutoDayNightMode, type DayNightMode } from './core/dial';
 
 export const App: React.FC = () => {
   const {
@@ -20,7 +28,26 @@ export const App: React.FC = () => {
     settings,
     googleBlocks,
     updateSettings,
+    resetToDefaultPresets,
   } = useClockStore();
+
+  // F1 단축키 콜백 등록을 포함한 Document PiP(최상단 플로팅 팝업) 훅
+  const { isSupported, isPiPActive, pipWindow, requestPiP, closePiP } = useDocumentPiP({
+    width: 360,
+    height: 360,
+    onF1Press: () => {
+      setIsSettingsOpen(true);
+    },
+  });
+
+  // 12시간 모드 주간/야간 수동 선택 상태 (기본값 null: 시간대 기반 자동)
+  const [manualDayNight, setManualDayNight] = useState<DayNightMode | null>(null);
+
+  const autoDayNight = useMemo(() => {
+    return getAutoDayNightMode(currentTime, settings.twelveHourStart);
+  }, [currentTime, settings.twelveHourStart]);
+
+  const activeDayNight: DayNightMode = manualDayNight ?? autoDayNight;
 
   // 데이터베이스 초기화
   useEffect(() => {
@@ -99,14 +126,41 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* 액션 버튼: 12H / 24H 모드 빠른 토글 버튼 */}
+        {/* 액션 버튼: 12H / 24H 모드, 일과표 팝업(PiP), 환경설정 */}
         <div className="flex items-center gap-2">
+          {/* Always on Top 일과표 플로팅 팝업 버튼 */}
+          {isSupported && (
+            <button
+              onClick={isPiPActive ? closePiP : requestPiP}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
+                isPiPActive
+                  ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
+              }`}
+              title="화면 어디서든 항상 위에 뜨는 일과표 전용 팝업 열기"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>{isPiPActive ? '팝업 닫기' : '일과표 팝업'}</span>
+            </button>
+          )}
+
           <button
             onClick={() => updateSettings({ dialMode: settings.dialMode === '12h' ? '24h' : '12h' })}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 flex items-center gap-1 transition-colors shadow-sm"
-            title="12시간 주간 모드 / 24시간 모드 전환"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 flex items-center gap-1.5 transition-colors shadow-sm"
+            title="12시간 주간/야간 모드 / 24시간 모드 전환"
           >
-            {settings.dialMode === '12h' ? '☀️ 12H 주간 모드' : '🌙 24H 전체 모드'}
+            {settings.dialMode === '12h'
+              ? activeDayNight === 'day'
+                ? '☀️ 12H 주간 모드'
+                : '🌙 12H 야간 모드'
+              : '🌌 24H 전체 모드'}
+          </button>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-slate-100 flex items-center gap-1 transition-colors shadow-sm"
+            title="환경설정 열기 (단축키 F1)"
+          >
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </header>
@@ -131,8 +185,65 @@ export const App: React.FC = () => {
                 <Sparkles className="w-3 h-3" /> {currentBlock.title} 진행 중
               </span>
             )}
+            {settings.calendarSource === 'google' && (
+              <button
+                onClick={() => updateSettings({ calendarSource: 'local' })}
+                className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
+                title="클릭 시 자체 일과표 보기로 전환"
+              >
+                구글 캘린더 모드 (자체 일과 보기 전환)
+              </button>
+            )}
+            {blocks.length === 0 && (
+              <button
+                onClick={() => resetToDefaultPresets()}
+                className="text-[11px] px-2.5 py-0.5 rounded-full font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 flex items-center gap-1 transition-colors"
+                title="기본 일과표(수면, 딥워크, 식사 등)를 복원합니다"
+              >
+                <RotateCcw className="w-3 h-3" /> 기본 일과 복원
+              </button>
+            )}
           </div>
         </div>
+
+        {/* 12시간 모드일 때 낮/밤 선택 아이콘 컨트롤러 (SDD 010) */}
+        {settings.dialMode === '12h' && (
+          <div className="flex items-center gap-1.5 mb-2 bg-slate-900/80 border border-slate-700/80 p-1 rounded-full shadow-lg">
+            <button
+              onClick={() => setManualDayNight('day')}
+              className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                activeDayNight === 'day'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="낮 일과표 보기"
+            >
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+              <span>낮 ({settings.twelveHourStart ?? 8}~{((settings.twelveHourStart ?? 8) + 12) % 24}시)</span>
+            </button>
+            <button
+              onClick={() => setManualDayNight('night')}
+              className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                activeDayNight === 'night'
+                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="밤 일과표 보기 (없을 시 빈값)"
+            >
+              <Moon className="w-3.5 h-3.5 text-indigo-400" />
+              <span>밤 ({((settings.twelveHourStart ?? 8) + 12) % 24}~{settings.twelveHourStart ?? 8}시)</span>
+            </button>
+            {manualDayNight !== null && (
+              <button
+                onClick={() => setManualDayNight(null)}
+                className="px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200 transition-colors ml-0.5"
+                title="현재 시각 기준 자동 전환으로 복귀"
+              >
+                자동
+              </button>
+            )}
+          </div>
+        )}
 
         {/* 24시간 / 12시간 원형 다이얼 차트 (반응형 규격) */}
         <div className="w-full max-w-[min(90vw,420px)] aspect-square flex items-center justify-center relative">
@@ -142,6 +253,7 @@ export const App: React.FC = () => {
             className="w-full h-full max-w-full max-h-full"
             dialMode={settings.dialMode}
             twelveHourStart={settings.twelveHourStart}
+            dayNightMode={activeDayNight}
           />
         </div>
 
@@ -171,6 +283,24 @@ export const App: React.FC = () => {
 
       {/* 환경설정 모달 */}
       <SettingsModal />
+
+      {/* Document PiP 플로팅 창 렌더링 (헤더/버튼 없이 일과표만 100% 렌더링) */}
+      {isPiPActive &&
+        pipWindow &&
+        createPortal(
+          <div className="w-full h-full flex items-center justify-center bg-slate-950 p-2 m-0 overflow-hidden select-none">
+            <ClockDial
+              currentTime={currentTime}
+              blocks={blocks}
+              className="w-full h-full max-w-full max-h-full"
+              showHourNumbers={true}
+              dialMode={settings.dialMode}
+              twelveHourStart={settings.twelveHourStart}
+              dayNightMode={activeDayNight}
+            />
+          </div>,
+          pipWindow.document.body
+        )}
     </div>
   );
 };

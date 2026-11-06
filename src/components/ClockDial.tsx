@@ -5,8 +5,11 @@ import {
   convertBlockToArcs,
   convertBlockTo12hArcs,
   checkUpcomingTransition,
+  getAutoDayNightMode,
+  getActive12hWindow,
   type RoutineBlock,
   type ArcSegment,
+  type DayNightMode,
 } from '../core/dial';
 
 interface ClockDialProps {
@@ -17,6 +20,7 @@ interface ClockDialProps {
   showHourNumbers?: boolean;
   dialMode?: '24h' | '12h'; // 기본 '12h'
   twelveHourStart?: number;  // 12시간 모드 주간 시작 시각 (기본 8)
+  dayNightMode?: DayNightMode; // SDD 010: 낮/밤 선택 모드 (미지정 시 자동)
 }
 
 /**
@@ -24,6 +28,7 @@ interface ClockDialProps {
  * - 피드백 반영: 화살촉을 중앙 원(r=90)부터 일과 칸(r=114)까지 30px 길이로 시원하게 길게 뻗은
  *   '롱 쉐브론 화살표(Long Arrow Dart)'로 업그레이드하여 압도적인 시인성과 세련미 제공
  * - 모바일 터치(Tap) 토글 지원 및 반응형 SVG 지원
+ * - SDD 010: 낮(☀️)/밤(🌙) 12시간 윈도우 선택 및 야간 일과 부재 시 빈값(Empty) 지원
  */
 export const ClockDial: React.FC<ClockDialProps> = ({
   currentTime,
@@ -33,6 +38,7 @@ export const ClockDial: React.FC<ClockDialProps> = ({
   showHourNumbers = true,
   dialMode = '12h',
   twelveHourStart = 8,
+  dayNightMode,
 }) => {
   const center = 200;
   const outerRadius = 162;
@@ -51,6 +57,12 @@ export const ClockDial: React.FC<ClockDialProps> = ({
     return checkUpcomingTransition(currentTime, blocks);
   }, [currentTime, blocks]);
 
+  // SDD 010: 현재 표시할 12시간 윈도우 계산 (낮/밤 수동 지정 또는 현재 시각 기준 자동)
+  const activeWindow = useMemo(() => {
+    const effectiveMode = dayNightMode ?? getAutoDayNightMode(currentTime, twelveHourStart);
+    return getActive12hWindow(effectiveMode, twelveHourStart);
+  }, [dayNightMode, currentTime, twelveHourStart]);
+
   // 시침 각도 계산
   const needleAngle = useMemo(() => {
     const time = {
@@ -61,19 +73,21 @@ export const ClockDial: React.FC<ClockDialProps> = ({
     return is12h ? calculate12hNeedleAngle(time) : calculateNeedleAngle(time);
   }, [currentTime, is12h]);
 
-  // 12시간 모드 주간 범위(startHour ~ startHour+12) 내 여부 판별
-  const isIn12hRange = useMemo(() => {
+  // 12시간 모드에서 현재 시각이 지금 보고 있는 윈도우(주간 또는 야간)에 속해 있는지 판별
+  const isInCurrentWindow = useMemo(() => {
     if (!is12h) return true;
     const currentMin = currentTime.getHours() * 60 + currentTime.getMinutes();
-    const startMin = twelveHourStart * 60;
-    const endMin = (twelveHourStart + 12) * 60;
+    const startMin = activeWindow.windowStartHour * 60;
+    const endMin = (activeWindow.windowStartHour + 12) * 60;
 
-    if (endMin <= 24 * 60) {
-      return currentMin >= startMin && currentMin < endMin;
-    } else {
-      return currentMin >= startMin || currentMin < (endMin % (24 * 60));
+    for (const offset of [0, 24 * 60]) {
+      const cur = currentMin + offset;
+      if (cur >= startMin && cur < endMin) {
+        return true;
+      }
     }
-  }, [currentTime, is12h, twelveHourStart]);
+    return false;
+  }, [currentTime, is12h, activeWindow]);
 
   // 디지털 시간 포맷팅
   const hoursStr = currentTime.getHours().toString().padStart(2, '0');
@@ -83,13 +97,13 @@ export const ClockDial: React.FC<ClockDialProps> = ({
   const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
   const dayStr = dayNames[currentTime.getDay()];
 
-  // 일과 블록들을 ArcSegment 목록으로 변환
+  // 일과 블록들을 ArcSegment 목록으로 변환 (SDD 010: 활성 윈도우 시작 시각 적용)
   const arcSegments = useMemo(() => {
     if (is12h) {
-      return blocks.flatMap((block) => convertBlockTo12hArcs(block, twelveHourStart));
+      return blocks.flatMap((block) => convertBlockTo12hArcs(block, activeWindow.windowStartHour));
     }
     return blocks.flatMap((block) => convertBlockToArcs(block));
-  }, [blocks, is12h, twelveHourStart]);
+  }, [blocks, is12h, activeWindow.windowStartHour]);
 
   // 각도 -> SVG 좌표 변환 (0도는 상단 -90도 회전)
   const polarToCartesian = (radius: number, angleInDegrees: number) => {
@@ -320,7 +334,7 @@ export const ClockDial: React.FC<ClockDialProps> = ({
           transform={`rotate(${needleAngle}, ${center}, ${center})`}
           filter="url(#arrowGlow)"
           className={`transition-transform duration-300 ease-out pointer-events-none ${
-            is12h && !isIn12hRange ? 'opacity-40' : 'opacity-100'
+            is12h && !isInCurrentWindow ? 'opacity-40' : 'opacity-100'
           }`}
         >
           {/* 길쭉한 화살촉 몸체 (Long Arrow Body: 끝점 y=82 ~ 밑변 y=112) */}
@@ -466,7 +480,7 @@ export const ClockDial: React.FC<ClockDialProps> = ({
               className="fill-slate-400 font-sans text-[11px] font-medium tracking-wide"
             >
               {is12h
-                ? `(${twelveHourStart}시~${(twelveHourStart + 12) % 24}시)`
+                ? `(${activeWindow.mode === 'day' ? '주간' : '야간'} ${activeWindow.windowStartHour.toString().padStart(2, '0')}시~${activeWindow.windowEndHour.toString().padStart(2, '0')}시)`
                 : '(0시~24시)'}
             </text>
           </g>

@@ -12,7 +12,11 @@ import {
   ShieldCheck,
   AlertCircle,
   RefreshCw,
+  Sun,
+  Moon,
+  RotateCcw,
 } from 'lucide-react';
+import { convertBlockTo12hArcs } from '../core/dial';
 
 const PRESET_COLORS = [
   '#3b82f6', // blue
@@ -45,16 +49,32 @@ export const SettingsModal: React.FC = () => {
     isGoogleSyncing,
     googleSyncError,
     googleBlocks,
+    resetToDefaultPresets,
   } = useClockStore();
 
   const [activeTab, setActiveTab] = useState<'routine' | 'calendar' | 'theme'>('routine');
   const [newPresetName, setNewPresetName] = useState('');
   
+  // SDD 010: 주간/야간/전체 일과표 필터링 및 입력 모드
+  const [routineFilter, setRoutineFilter] = useState<'all' | 'day' | 'night'>('all');
+
   // 새 블록 입력 상태
   const [newTitle, setNewTitle] = useState('');
   const [newStart, setNewStart] = useState('09:00');
   const [newEnd, setNewEnd] = useState('12:00');
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
+
+  // 필터 변경 시 추천 시간 자동 반영
+  const handleSelectRoutineFilter = (filter: 'all' | 'day' | 'night') => {
+    setRoutineFilter(filter);
+    if (filter === 'night') {
+      setNewStart('20:00');
+      setNewEnd('23:00');
+    } else if (filter === 'day') {
+      setNewStart('09:00');
+      setNewEnd('12:00');
+    }
+  };
 
   if (!isSettingsOpen) return null;
 
@@ -155,6 +175,17 @@ export const SettingsModal: React.FC = () => {
                   </label>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => {
+                        if (confirm('기본 일과 템플릿(평일/주말 루틴)으로 초기화하시겠습니까?')) {
+                          resetToDefaultPresets();
+                        }
+                      }}
+                      className="text-xs flex items-center gap-1 px-2.5 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded-lg transition-colors"
+                      title="기본 일과표 복원"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" /> 기본 일과 복원
+                    </button>
+                    <button
                       onClick={() => duplicatePreset(currentPreset.id)}
                       className="text-xs flex items-center gap-1 px-2.5 py-1.5 bg-slate-700/70 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
                       title="현재 일과표 복제"
@@ -209,103 +240,182 @@ export const SettingsModal: React.FC = () => {
               </div>
 
               {/* 현재 일과표의 시간 블록 목록 */}
-              {currentPreset && (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-slate-300 flex items-center justify-between">
-                    <span>
-                      [{currentPreset.name}] 하루 시간표 ({currentPreset.blocks.length}개 블록)
-                    </span>
-                  </h3>
+              {currentPreset && (() => {
+                const dayStart = settings.twelveHourStart ?? 8;
+                const nightStart = (dayStart + 12) % 24;
 
-                  {/* 블록 추가 입력 */}
-                  <form onSubmit={handleAddBlock} className="bg-slate-800/30 border border-slate-700/50 p-4 rounded-xl space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="text-xs text-slate-400 block mb-1">일과 제목</label>
-                        <input
-                          type="text"
-                          value={newTitle}
-                          onChange={(e) => setNewTitle(e.target.value)}
-                          placeholder="예: 독서, 회의, 운동"
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-400 block mb-1">시작 시각</label>
-                        <input
-                          type="time"
-                          value={newStart}
-                          onChange={(e) => setNewStart(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-400 block mb-1">종료 시각 (자정 넘김 가능)</label>
-                        <input
-                          type="time"
-                          value={newEnd}
-                          onChange={(e) => setNewEnd(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                    </div>
+                const displayedBlocks = currentPreset.blocks.filter((block) => {
+                  if (routineFilter === 'day') {
+                    return convertBlockTo12hArcs(block, dayStart).length > 0;
+                  }
+                  if (routineFilter === 'night') {
+                    return convertBlockTo12hArcs(block, nightStart).length > 0;
+                  }
+                  return true;
+                });
 
-                    <div className="flex items-center justify-between pt-1">
-                      {/* 색상 선택 */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-slate-400 mr-1">색상:</span>
-                        {PRESET_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => setNewColor(c)}
-                            style={{ backgroundColor: c }}
-                            className={`w-5 h-5 rounded-full transition-transform ${
-                              newColor === c ? 'scale-125 ring-2 ring-white' : 'opacity-80 hover:opacity-100'
-                            }`}
-                          />
-                        ))}
-                      </div>
+                return (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-700/50 pb-2">
+                      <h3 className="text-sm font-semibold text-slate-300">
+                        [{currentPreset.name}] 일과표 관리 ({displayedBlocks.length}개 표시)
+                      </h3>
 
-                      <button
-                        type="submit"
-                        className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium flex items-center gap-1 transition-colors"
-                      >
-                        <Plus className="w-4 h-4" /> 블록 등록
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* 등록된 블록 리스트 */}
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {currentPreset.blocks.length === 0 ? (
-                      <p className="text-xs text-slate-500 text-center py-4">등록된 일과가 없습니다. 위에서 일과를 추가해보세요.</p>
-                    ) : (
-                      currentPreset.blocks.map((block) => (
-                        <div
-                          key={block.id}
-                          className="flex items-center justify-between p-2.5 bg-slate-800/60 border border-slate-700/60 rounded-lg hover:border-slate-600 transition-colors"
+                      {/* SDD 010: 주간/야간/전체 필터 세그먼트 */}
+                      <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-lg border border-slate-700/60">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectRoutineFilter('all')}
+                          className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                            routineFilter === 'all'
+                              ? 'bg-slate-700 text-white font-semibold'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: block.color }} />
-                            <span className="font-medium text-slate-200">{block.title}</span>
-                            <span className="text-xs font-mono text-slate-400">
-                              {block.startHour.toString().padStart(2, '0')}:{block.startMinute.toString().padStart(2, '0')} ~{' '}
-                              {block.endHour.toString().padStart(2, '0')}:{block.endMinute.toString().padStart(2, '0')}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => deleteBlock(currentPreset.id, block.id)}
-                            className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          전체 (24H)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectRoutineFilter('day')}
+                          className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1 transition-colors ${
+                            routineFilter === 'day'
+                              ? 'bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Sun className="w-3 h-3 text-amber-400" /> 주간 ({dayStart}~{nightStart}시)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectRoutineFilter('night')}
+                          className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1 transition-colors ${
+                            routineFilter === 'night'
+                              ? 'bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Moon className="w-3 h-3 text-indigo-400" /> 야간 ({nightStart}~{dayStart}시)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 블록 추가 입력 */}
+                    <form onSubmit={handleAddBlock} className="bg-slate-800/30 border border-slate-700/50 p-4 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                        <span>
+                          {routineFilter === 'night' && '🌙 야간 일과 블록 등록'}
+                          {routineFilter === 'day' && '☀️ 주간 일과 블록 등록'}
+                          {routineFilter === 'all' && '➕ 새 일과 블록 등록'}
+                        </span>
+                        {routineFilter === 'night' && (
+                          <span className="text-[11px] text-indigo-400 font-normal">
+                            * 등록하지 않으면 야간 시계판은 빈값(빈 다이얼)으로 유지됩니다
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs text-slate-400 block mb-1">일과 제목</label>
+                          <input
+                            type="text"
+                            value={newTitle}
+                            onChange={(e) => setNewTitle(e.target.value)}
+                            placeholder={routineFilter === 'night' ? '예: 야간 독서, 취침 준비' : '예: 독서, 회의, 운동'}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                          />
                         </div>
-                      ))
-                    )}
+                        <div>
+                          <label className="text-xs text-slate-400 block mb-1">시작 시각</label>
+                          <input
+                            type="time"
+                            value={newStart}
+                            onChange={(e) => setNewStart(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-400 block mb-1">종료 시각 (자정 넘김 가능)</label>
+                          <input
+                            type="time"
+                            value={newEnd}
+                            onChange={(e) => setNewEnd(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        {/* 색상 선택 */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-slate-400 mr-1">색상:</span>
+                          {PRESET_COLORS.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setNewColor(c)}
+                              style={{ backgroundColor: c }}
+                              className={`w-5 h-5 rounded-full transition-transform ${
+                                newColor === c ? 'scale-125 ring-2 ring-white' : 'opacity-80 hover:opacity-100'
+                              }`}
+                            />
+                          ))}
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium flex items-center gap-1 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" /> 블록 등록
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* 등록된 블록 리스트 */}
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {displayedBlocks.length === 0 ? (
+                        <div className="text-center py-6 px-4 bg-slate-800/20 border border-dashed border-slate-700/60 rounded-xl space-y-1">
+                          <p className="text-xs font-semibold text-slate-300">
+                            {routineFilter === 'night'
+                              ? '🌙 등록된 야간 일과가 없습니다'
+                              : routineFilter === 'day'
+                              ? '☀️ 등록된 주간 일과가 없습니다'
+                              : '등록된 일과가 없습니다'}
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            {routineFilter === 'night'
+                              ? '야간 시간표에는 빈값으로 표시됩니다. 필요 시 위에서 야간 일정을 추가하세요.'
+                              : '위 입력 폼에서 새로운 일정을 등록해보세요.'}
+                          </p>
+                        </div>
+                      ) : (
+                        displayedBlocks.map((block) => (
+                          <div
+                            key={block.id}
+                            className="flex items-center justify-between p-2.5 bg-slate-800/60 border border-slate-700/60 rounded-lg hover:border-slate-600 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: block.color }} />
+                              <span className="font-medium text-slate-200">{block.title}</span>
+                              <span className="text-xs font-mono text-slate-400">
+                                {block.startHour.toString().padStart(2, '0')}:{block.startMinute.toString().padStart(2, '0')} ~{' '}
+                                {block.endHour.toString().padStart(2, '0')}:{block.endMinute.toString().padStart(2, '0')}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => deleteBlock(currentPreset.id, block.id)}
+                              className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
+                              title="일과 삭제"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 

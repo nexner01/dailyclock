@@ -106,4 +106,74 @@ describe('<ClockDial /> Component - Taste as Code Invariants & SDD 005 & SDD 007
     expect(countdown.textContent).toContain('4');
     expect(countdown.textContent).toContain('집중 업무');
   });
+
+  describe('12시간 주간/야간 전환 및 빈값 처리 (SDD 010)', () => {
+    const dayOnlyBlocks: RoutineBlock[] = [
+      {
+        id: 'day-1',
+        title: '오전 딥워크',
+        startHour: 9,
+        startMinute: 0,
+        endHour: 12,
+        endMinute: 0,
+        color: '#3b82f6',
+      },
+    ];
+
+    const nightBlocks: RoutineBlock[] = [
+      {
+        id: 'night-1',
+        title: '야간 수면',
+        startHour: 23,
+        startMinute: 0,
+        endHour: 7,
+        endMinute: 0,
+        color: '#475569',
+      },
+    ];
+
+    it('야간 시간대(21:00)에 야간 일과가 없으면 다이얼은 빈값(0개 아크)이어야 한다 (빈값 보장)', () => {
+      // 21:00 -> 야간 윈도우(20:00~08:00) 자동 활성화
+      render(
+        <ClockDial
+          currentTime={new Date(2026, 10, 6, 21, 0, 0)}
+          blocks={dayOnlyBlocks}
+          dialMode="12h"
+        />
+      );
+
+      expect(screen.queryByTestId('routine-arc-0')).toBeNull();
+      expect(screen.getByText('(야간 20시~08시)')).toBeInTheDocument();
+    });
+
+    it('야간 시간대(21:00)에 야간 일과가 있으면 다이얼에 정상 렌더링되어야 한다', () => {
+      render(
+        <ClockDial
+          currentTime={new Date(2026, 10, 6, 21, 0, 0)}
+          blocks={nightBlocks}
+          dialMode="12h"
+        />
+      );
+
+      expect(screen.getByTestId('routine-arc-0')).toBeInTheDocument();
+      expect(screen.getByText('야간 수면')).toBeInTheDocument();
+      expect(screen.getByText('(야간 20시~08시)')).toBeInTheDocument();
+    });
+
+    it('수동으로 dayNightMode="night"를 전달하면 낮 시간대라도 야간 일과표(또는 빈값)를 보여주어야 한다', () => {
+      render(
+        <ClockDial
+          currentTime={new Date(2026, 10, 6, 10, 0, 0)} // 오전 10시
+          blocks={nightBlocks}
+          dialMode="12h"
+          dayNightMode="night"
+        />
+      );
+
+      // 밤 일과표를 강제로 보므로 '야간 수면' 아크가 표시되어야 함
+      expect(screen.getByTestId('routine-arc-0')).toBeInTheDocument();
+      expect(screen.getByText('야간 수면')).toBeInTheDocument();
+      expect(screen.getByText('(야간 20시~08시)')).toBeInTheDocument();
+    });
+  });
 });

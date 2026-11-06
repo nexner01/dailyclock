@@ -5,6 +5,8 @@ import {
   convertBlockToArcs,
   convertBlockTo12hArcs,
   checkUpcomingTransition,
+  getAutoDayNightMode,
+  getActive12hWindow,
   type TimeInput,
   type RoutineBlock,
 } from './dial';
@@ -184,6 +186,122 @@ describe('Dial Core - SDD 001 & 002 & 004 & 007 Specification', () => {
       const timeAfter = new Date(2026, 10, 5, 13, 0, 1);
       expect(checkUpcomingTransition(timeOn, dummyBlocks)).toBeNull();
       expect(checkUpcomingTransition(timeAfter, dummyBlocks)).toBeNull();
+    });
+  });
+
+  describe('12시간 주간/야간 모드 및 빈값 처리 (SDD 010)', () => {
+    describe('getAutoDayNightMode & getActive12hWindow', () => {
+      it('주간 시간(08:00 ~ 19:59)에는 day 모드를 반환해야 한다', () => {
+        const morning = new Date(2026, 10, 6, 8, 0, 0);
+        const noon = new Date(2026, 10, 6, 12, 30, 0);
+        const evening = new Date(2026, 10, 6, 19, 59, 59);
+
+        expect(getAutoDayNightMode(morning, 8)).toBe('day');
+        expect(getAutoDayNightMode(noon, 8)).toBe('day');
+        expect(getAutoDayNightMode(evening, 8)).toBe('day');
+      });
+
+      it('야간 시간(20:00 ~ 07:59)에는 night 모드를 반환해야 한다', () => {
+        const nightStart = new Date(2026, 10, 6, 20, 0, 0);
+        const midnight = new Date(2026, 10, 6, 23, 59, 59);
+        const dawn = new Date(2026, 10, 6, 3, 0, 0);
+        const preMorning = new Date(2026, 10, 6, 7, 59, 59);
+
+        expect(getAutoDayNightMode(nightStart, 8)).toBe('night');
+        expect(getAutoDayNightMode(midnight, 8)).toBe('night');
+        expect(getAutoDayNightMode(dawn, 8)).toBe('night');
+        expect(getAutoDayNightMode(preMorning, 8)).toBe('night');
+      });
+
+      it('getActive12hWindow는 day 모드일 때 8시~20시 윈도우를 반환해야 한다', () => {
+        const win = getActive12hWindow('day', 8);
+        expect(win).toEqual({
+          mode: 'day',
+          windowStartHour: 8,
+          windowEndHour: 20,
+        });
+      });
+
+      it('getActive12hWindow는 night 모드일 때 20시~8시 윈도우를 반환해야 한다', () => {
+        const win = getActive12hWindow('night', 8);
+        expect(win).toEqual({
+          mode: 'night',
+          windowStartHour: 20,
+          windowEndHour: 8,
+        });
+      });
+    });
+
+    describe('convertBlockTo12hArcs 야간 윈도우 및 빈값 검증', () => {
+      const dayBlock: RoutineBlock = {
+        id: 'day-1',
+        title: '오전 딥워크',
+        startHour: 9,
+        startMinute: 0,
+        endHour: 12,
+        endMinute: 0,
+        color: '#3b82f6',
+      };
+
+      const nightSleepBlock: RoutineBlock = {
+        id: 'night-1',
+        title: '수면 및 휴식',
+        startHour: 23,
+        startMinute: 0,
+        endHour: 7,
+        endMinute: 0,
+        color: '#475569',
+      };
+
+      const eveningReadingBlock: RoutineBlock = {
+        id: 'night-2',
+        title: '독서 및 정리',
+        startHour: 21,
+        startMinute: 0,
+        endHour: 22,
+        endMinute: 30,
+        color: '#8b5cf6',
+      };
+
+      it('야간 윈도우(20시~8시)에 주간 일정만 주어지면 빈 배열 []을 반환해야 한다 (빈값 보장)', () => {
+        const arcs = convertBlockTo12hArcs(dayBlock, 20);
+        expect(arcs).toEqual([]);
+      });
+
+      it('야간 윈도우(20시~8시)에 야간 일정(21:00~22:30)은 9시 위치(270도) ~ 10시 반 위치(315도)로 매핑되어야 한다', () => {
+        const arcs = convertBlockTo12hArcs(eveningReadingBlock, 20);
+        expect(arcs).toHaveLength(1);
+        expect(arcs[0]).toMatchObject({
+          startAngle: 270,
+          endAngle: 315,
+          color: '#8b5cf6',
+          title: '독서 및 정리',
+        });
+      });
+
+      it('야간 윈도우(20시~8시)에 자정을 넘나드는 수면 일정(23:00~07:00)은 12시를 가로지르므로 올바르게 분할 또는 매핑되어야 한다', () => {
+        const arcs = convertBlockTo12hArcs(nightSleepBlock, 20);
+        // 23:00는 11시 위치(330도), 07:00는 7시 위치(210도) -> 12시(0도)를 통과
+        expect(arcs.length).toBeGreaterThanOrEqual(1);
+        const totalDegree = arcs.reduce((acc, a) => acc + (a.endAngle - a.startAngle), 0);
+        // 23시부터 7시까지는 8시간 = 8 * 30도 = 240도
+        expect(totalDegree).toBe(240);
+      });
+      it('DEFAULT_PRESETS의 평일 블록들을 주간(8시) 윈도우에 넣었을 때 오전 일과가 반환되어야 한다', () => {
+        const weekdayBlocks: RoutineBlock[] = [
+          { id: 'b1', title: '수면 및 휴식', startHour: 23, startMinute: 0, endHour: 7, endMinute: 0, color: '#475569' },
+          { id: 'b2', title: '기상 및 아침 루틴', startHour: 7, startMinute: 0, endHour: 8, endMinute: 30, color: '#f59e0b' },
+          { id: 'b3', title: '오전 딥워크', startHour: 9, startMinute: 0, endHour: 12, endMinute: 0, color: '#3b82f6' },
+          { id: 'b4', title: '점심 식사 및 산책', startHour: 12, startMinute: 0, endHour: 13, endMinute: 0, color: '#10b981' },
+          { id: 'b5', title: '오후 협업 및 실행', startHour: 13, startMinute: 0, endHour: 18, endMinute: 0, color: '#6366f1' },
+          { id: 'b6', title: '저녁 식사 및 운동', startHour: 18, startMinute: 30, endHour: 20, endMinute: 30, color: '#ec4899' },
+          { id: 'b7', title: '독서 및 정리', startHour: 21, startMinute: 0, endHour: 22, endMinute: 30, color: '#8b5cf6' },
+        ];
+
+        const arcs = weekdayBlocks.flatMap((b) => convertBlockTo12hArcs(b, 8));
+        console.log('WEEKDAY ARCS IN DAY (8):', arcs.map(a => `${a.title}: ${a.startAngle}~${a.endAngle}`));
+        expect(arcs.length).toBeGreaterThan(0);
+      });
     });
   });
 });

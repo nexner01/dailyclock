@@ -30,6 +30,7 @@ interface ClockState {
   updatePreset: (id: string, updates: Partial<RoutinePreset>) => Promise<void>;
   duplicatePreset: (id: string) => Promise<RoutinePreset>;
   deletePreset: (id: string) => Promise<void>;
+  resetToDefaultPresets: () => Promise<void>;
   
   // 블록 관리
   addBlock: (presetId: string, block: Omit<RoutineBlock, 'id'>) => Promise<void>;
@@ -154,6 +155,15 @@ export const useClockStore = create<ClockState>((set, get) => ({
     set({
       presets: remaining,
       activePresetId: nextActiveId,
+    });
+  },
+
+  resetToDefaultPresets: async () => {
+    await db.presets.clear();
+    await db.presets.bulkAdd(DEFAULT_PRESETS);
+    set({
+      presets: DEFAULT_PRESETS,
+      activePresetId: DEFAULT_PRESETS[0].id,
     });
   },
 

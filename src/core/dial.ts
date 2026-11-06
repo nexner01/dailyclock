@@ -79,6 +79,52 @@ export interface TransitionCountdownInfo {
   remainingSeconds: number; // 1 ~ 5
 }
 
+export type DayNightMode = 'day' | 'night';
+
+export interface Active12hWindow {
+  mode: DayNightMode;
+  windowStartHour: number; // 주간: dayStartHour (기본 8), 야간: (dayStartHour + 12) % 24 (기본 20)
+  windowEndHour: number;   // 주간: (dayStartHour + 12) % 24 (기본 20), 야간: dayStartHour (기본 8)
+}
+
+/**
+ * 현재 시각을 기준으로 자동 계산되는 기본 낮/밤 모드 반환 (SDD 010)
+ */
+export function getAutoDayNightMode(currentTime: Date, dayStartHour = 8): DayNightMode {
+  const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+  const dayStartMin = dayStartHour * 60;
+  const dayEndMin = (dayStartHour + 12) * 60; // 예: 20 * 60 = 1200분
+
+  if (dayEndMin <= 24 * 60) {
+    return currentMinutes >= dayStartMin && currentMinutes < dayEndMin ? 'day' : 'night';
+  } else {
+    const normalizedEndMin = dayEndMin % (24 * 60);
+    return currentMinutes >= dayStartMin || currentMinutes < normalizedEndMin ? 'day' : 'night';
+  }
+}
+
+/**
+ * 선택된 낮/밤 모드(수동 선택 또는 자동)에 따른 12시간 윈도우 반환 (SDD 010)
+ */
+export function getActive12hWindow(
+  mode: DayNightMode,
+  dayStartHour = 8
+): Active12hWindow {
+  if (mode === 'day') {
+    return {
+      mode: 'day',
+      windowStartHour: dayStartHour,
+      windowEndHour: (dayStartHour + 12) % 24,
+    };
+  } else {
+    return {
+      mode: 'night',
+      windowStartHour: (dayStartHour + 12) % 24,
+      windowEndHour: dayStartHour,
+    };
+  }
+}
+
 /**
  * 일과 전환 5초 전 카운트다운 감지 (SDD 007)
  */
@@ -174,33 +220,48 @@ export function convertBlockToArcs(block: RoutineBlock): ArcSegment[] {
 }
 
 /**
- * 12시간 주간 아날로그 시계 호(ArcSegment) 변환 (SDD 004)
- * 주간 유효 범위 [startHour ~ startHour + 12](기본 08:00 ~ 20:00)와 겹치는 구간만
- * 실제 아날로그 시계 위치(1시간=30도, 1분=0.5도)로 매핑
+ * 12시간 아날로그 시계 호(ArcSegment) 변환 (SDD 004 & SDD 010)
+ * 지정된 12시간 윈도우 [windowStartHour ~ windowStartHour + 12]와 겹치는 구간만
+ * 실제 아날로그 시계 각도(1시간=30도, 1분=0.5도)로 매핑.
+ * 겹치는 일정이 없으면 빈 배열 [] 반환 (야간 일정 없을 시 빈값 보장).
  */
 export function convertBlockTo12hArcs(
   block: RoutineBlock,
-  startHour = 8
+  windowStartHour = 8
 ): ArcSegment[] {
-  const windowStartMin = startHour * 60;
-  const windowEndMin = (startHour + 12) * 60;
+  const windowStartMin = windowStartHour * 60;
+  const windowEndMin = (windowStartHour + 12) * 60;
 
   // 블록의 시작/종료 분 계산
   let blockStartMin = block.startHour * 60 + block.startMinute;
   let blockEndMin = block.endHour * 60 + block.endMinute;
 
-  // 자정 통과 일정 처리
+  // 자정 통과 일정 처리 (예: 23:00 -> 07:00 => 1380 -> 1860)
   if (blockStartMin > blockEndMin) {
     blockEndMin += 24 * 60;
   }
 
-  // 12시간 윈도우가 24시간을 넘지 않는 경우 (예: 08:00 ~ 20:00)
-  // 주간 윈도우와의 교차 구간 계산
-  const overlapStart = Math.max(blockStartMin, windowStartMin);
-  const overlapEnd = Math.min(blockEndMin, windowEndMin);
+  // 12시간 윈도우(예: 20:00~32:00)와의 교차 구간 계산
+  // 자정 전후(0시~8시) 일정도 야간 윈도우에 걸치도록 24시간 오프셋 순회 검사
+  let overlapStart = -1;
+  let overlapEnd = -1;
 
-  if (overlapStart >= overlapEnd) {
-    return []; // 12시간 주간 범위 밖의 일정
+  for (const offset of [0, 24 * 60]) {
+    const curBStart = blockStartMin + offset;
+    const curBEnd = blockEndMin + offset;
+
+    const oStart = Math.max(curBStart, windowStartMin);
+    const oEnd = Math.min(curBEnd, windowEndMin);
+
+    if (oStart < oEnd) {
+      overlapStart = oStart;
+      overlapEnd = oEnd;
+      break;
+    }
+  }
+
+  if (overlapStart >= overlapEnd || overlapStart === -1) {
+    return []; // 12시간 윈도우 밖의 일정 (빈값)
   }
 
   // 각도로 변환: (시 % 12) * 30 + 분 * 0.5
@@ -230,7 +291,7 @@ export function convertBlockTo12hArcs(
       },
     ];
   } else {
-    // 12시(0도)를 통과하는 경우 (예: 11:30 -> 13:00)
+    // 12시(0도)를 통과하는 경우 (예: 11:30 -> 13:00 또는 23:00 -> 01:00)
     return [
       {
         startAngle,
