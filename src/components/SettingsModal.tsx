@@ -15,8 +15,10 @@ import {
   Sun,
   Moon,
   RotateCcw,
+  Edit2,
+  Save,
 } from 'lucide-react';
-import { convertBlockTo12hArcs } from '../core/dial';
+import { convertBlockTo12hArcs, sortRoutineBlocks, type RoutineBlock } from '../core/dial';
 
 const PRESET_COLORS = [
   '#3b82f6', // blue
@@ -42,6 +44,7 @@ export const SettingsModal: React.FC = () => {
     duplicatePreset,
     deletePreset,
     addBlock,
+    updateBlock,
     deleteBlock,
     settings,
     updateSettings,
@@ -58,7 +61,10 @@ export const SettingsModal: React.FC = () => {
   // SDD 010: 주간/야간/전체 일과표 필터링 및 입력 모드
   const [routineFilter, setRoutineFilter] = useState<'all' | 'day' | 'night'>('all');
 
-  // 새 블록 입력 상태
+  // SDD 011: 일과 블록 수정 모드 상태
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+
+  // 블록 입력 폼 상태
   const [newTitle, setNewTitle] = useState('');
   const [newStart, setNewStart] = useState('09:00');
   const [newEnd, setNewEnd] = useState('12:00');
@@ -67,13 +73,45 @@ export const SettingsModal: React.FC = () => {
   // 필터 변경 시 추천 시간 자동 반영
   const handleSelectRoutineFilter = (filter: 'all' | 'day' | 'night') => {
     setRoutineFilter(filter);
-    if (filter === 'night') {
+    if (!editingBlockId) {
+      if (filter === 'night') {
+        setNewStart('20:00');
+        setNewEnd('23:00');
+      } else if (filter === 'day') {
+        setNewStart('09:00');
+        setNewEnd('12:00');
+      }
+    }
+  };
+
+  // SDD 011: 하단 블록 선택 시 상단 폼에 값 채우기
+  const handleSelectBlockForEdit = (block: RoutineBlock) => {
+    if (editingBlockId === block.id) {
+      handleCancelEdit();
+      return;
+    }
+    setEditingBlockId(block.id);
+    setNewTitle(block.title);
+    setNewStart(`${block.startHour.toString().padStart(2, '0')}:${block.startMinute.toString().padStart(2, '0')}`);
+    setNewEnd(`${block.endHour.toString().padStart(2, '0')}:${block.endMinute.toString().padStart(2, '0')}`);
+    setNewColor(block.color);
+  };
+
+  // SDD 011: 수정 취소 및 폼 초기화
+  const handleCancelEdit = () => {
+    setEditingBlockId(null);
+    setNewTitle('');
+    if (routineFilter === 'night') {
       setNewStart('20:00');
       setNewEnd('23:00');
-    } else if (filter === 'day') {
+    } else if (routineFilter === 'day') {
+      setNewStart('09:00');
+      setNewEnd('12:00');
+    } else {
       setNewStart('09:00');
       setNewEnd('12:00');
     }
+    setNewColor(PRESET_COLORS[0]);
   };
 
   if (!isSettingsOpen) return null;
@@ -87,23 +125,37 @@ export const SettingsModal: React.FC = () => {
     setNewPresetName('');
   };
 
-  const handleAddBlock = async (e: React.FormEvent) => {
+  // SDD 011: 블록 등록 및 수정 저장 통합 핸들러
+  const handleSubmitBlock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !currentPreset) return;
 
     const [startH, startM] = newStart.split(':').map(Number);
     const [endH, endM] = newEnd.split(':').map(Number);
 
-    await addBlock(currentPreset.id, {
-      title: newTitle.trim(),
-      startHour: startH,
-      startMinute: startM,
-      endHour: endH,
-      endMinute: endM,
-      color: newColor,
-    });
-
-    setNewTitle('');
+    if (editingBlockId) {
+      // 수정 저장
+      await updateBlock(currentPreset.id, editingBlockId, {
+        title: newTitle.trim(),
+        startHour: startH,
+        startMinute: startM,
+        endHour: endH,
+        endMinute: endM,
+        color: newColor,
+      });
+      handleCancelEdit();
+    } else {
+      // 신규 등록
+      await addBlock(currentPreset.id, {
+        title: newTitle.trim(),
+        startHour: startH,
+        startMinute: startM,
+        endHour: endH,
+        endMinute: endM,
+        color: newColor,
+      });
+      setNewTitle('');
+    }
   };
 
   return (
@@ -244,7 +296,10 @@ export const SettingsModal: React.FC = () => {
                 const dayStart = settings.twelveHourStart ?? 8;
                 const nightStart = (dayStart + 12) % 24;
 
-                const displayedBlocks = currentPreset.blocks.filter((block) => {
+                // SDD 011: 시간순 자동 정렬 적용 후 필터링
+                const sortedBlocks = sortRoutineBlocks(currentPreset.blocks);
+
+                const displayedBlocks = sortedBlocks.filter((block) => {
                   if (routineFilter === 'day') {
                     return convertBlockTo12hArcs(block, dayStart).length > 0;
                   }
@@ -299,19 +354,32 @@ export const SettingsModal: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* 블록 추가 입력 */}
-                    <form onSubmit={handleAddBlock} className="bg-slate-800/30 border border-slate-700/50 p-4 rounded-xl space-y-3">
+                    {/* 블록 추가 및 수정 입력 폼 (SDD 011) */}
+                    <form onSubmit={handleSubmitBlock} className="bg-slate-800/30 border border-slate-700/50 p-4 rounded-xl space-y-3">
                       <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
-                        <span>
-                          {routineFilter === 'night' && '🌙 야간 일과 블록 등록'}
-                          {routineFilter === 'day' && '☀️ 주간 일과 블록 등록'}
-                          {routineFilter === 'all' && '➕ 새 일과 블록 등록'}
+                        <span className="flex items-center gap-1.5">
+                          {editingBlockId ? (
+                            <>
+                              <Edit2 className="w-3.5 h-3.5 text-indigo-400" />
+                              <span className="text-indigo-300">선택된 일과 수정 중</span>
+                            </>
+                          ) : (
+                            <>
+                              {routineFilter === 'night' && '🌙 야간 일과 블록 등록'}
+                              {routineFilter === 'day' && '☀️ 주간 일과 블록 등록'}
+                              {routineFilter === 'all' && '➕ 새 일과 블록 등록'}
+                            </>
+                          )}
                         </span>
-                        {routineFilter === 'night' && (
+                        {editingBlockId ? (
+                          <span className="text-[11px] text-slate-400 font-normal">
+                            * 아래 블록 목록을 다시 누르면 선택이 토글/해제됩니다
+                          </span>
+                        ) : routineFilter === 'night' ? (
                           <span className="text-[11px] text-indigo-400 font-normal">
                             * 등록하지 않으면 야간 시계판은 빈값(빈 다이얼)으로 유지됩니다
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -346,32 +414,51 @@ export const SettingsModal: React.FC = () => {
                       </div>
 
                       <div className="flex items-center justify-between pt-1">
-                        {/* 색상 선택 */}
+                        {/* 색상 선택 (SDD 011: 선택된 블록 색상 링 강조) */}
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-slate-400 mr-1">색상:</span>
-                          {PRESET_COLORS.map((c) => (
+                          {(PRESET_COLORS.includes(newColor) ? PRESET_COLORS : [newColor, ...PRESET_COLORS]).map((c) => (
                             <button
                               key={c}
                               type="button"
                               onClick={() => setNewColor(c)}
                               style={{ backgroundColor: c }}
                               className={`w-5 h-5 rounded-full transition-transform ${
-                                newColor === c ? 'scale-125 ring-2 ring-white' : 'opacity-80 hover:opacity-100'
+                                newColor === c ? 'scale-125 ring-2 ring-white shadow-md' : 'opacity-80 hover:opacity-100'
                               }`}
                             />
                           ))}
                         </div>
 
-                        <button
-                          type="submit"
-                          className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium flex items-center gap-1 transition-colors"
-                        >
-                          <Plus className="w-4 h-4" /> 블록 등록
-                        </button>
+                        {/* 액션 버튼: 수정 모드 vs 등록 모드 */}
+                        {editingBlockId ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCancelEdit}
+                              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-medium transition-colors"
+                            >
+                              취소
+                            </button>
+                            <button
+                              type="submit"
+                              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                            >
+                              <Save className="w-3.5 h-3.5" /> 일과 수정 저장
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="submit"
+                            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus className="w-4 h-4" /> 블록 등록
+                          </button>
+                        )}
                       </div>
                     </form>
 
-                    {/* 등록된 블록 리스트 */}
+                    {/* 등록된 블록 리스트 (SDD 011: 시간순 자동 정렬 및 클릭 시 상단 폼 연동 수정) */}
                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                       {displayedBlocks.length === 0 ? (
                         <div className="text-center py-6 px-4 bg-slate-800/20 border border-dashed border-slate-700/60 rounded-xl space-y-1">
@@ -389,28 +476,53 @@ export const SettingsModal: React.FC = () => {
                           </p>
                         </div>
                       ) : (
-                        displayedBlocks.map((block) => (
-                          <div
-                            key={block.id}
-                            className="flex items-center justify-between p-2.5 bg-slate-800/60 border border-slate-700/60 rounded-lg hover:border-slate-600 transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: block.color }} />
-                              <span className="font-medium text-slate-200">{block.title}</span>
-                              <span className="text-xs font-mono text-slate-400">
-                                {block.startHour.toString().padStart(2, '0')}:{block.startMinute.toString().padStart(2, '0')} ~{' '}
-                                {block.endHour.toString().padStart(2, '0')}:{block.endMinute.toString().padStart(2, '0')}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => deleteBlock(currentPreset.id, block.id)}
-                              className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
-                              title="일과 삭제"
+                        displayedBlocks.map((block) => {
+                          const isEditing = editingBlockId === block.id;
+
+                          return (
+                            <div
+                              key={block.id}
+                              onClick={() => handleSelectBlockForEdit(block)}
+                              className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
+                                isEditing
+                                  ? 'bg-indigo-950/60 border-indigo-500 ring-2 ring-indigo-500/80 shadow-md'
+                                  : 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
+                              }`}
+                              title="클릭하여 상단 폼에서 수정"
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                                  style={{ backgroundColor: block.color }}
+                                />
+                                <span className="font-medium text-slate-200">{block.title}</span>
+                                <span className="text-xs font-mono text-slate-400">
+                                  {block.startHour.toString().padStart(2, '0')}:
+                                  {block.startMinute.toString().padStart(2, '0')} ~{' '}
+                                  {block.endHour.toString().padStart(2, '0')}:
+                                  {block.endMinute.toString().padStart(2, '0')}
+                                </span>
+                                {isEditing && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-300 font-semibold flex items-center gap-0.5">
+                                    <Edit2 className="w-2.5 h-2.5" /> 수정 중
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isEditing) handleCancelEdit();
+                                  deleteBlock(currentPreset.id, block.id);
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
+                                title="일과 삭제"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          );
+                        })
                       )}
                     </div>
                   </div>

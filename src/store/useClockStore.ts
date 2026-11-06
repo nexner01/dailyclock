@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { db, DEFAULT_PRESETS, type RoutinePreset, type UserSettings } from '../db';
-import type { RoutineBlock } from '../core/dial';
+import { sortRoutineBlocks, type RoutineBlock } from '../core/dial';
 import {
   fetchGoogleCalendarEvents,
   fetchGoogleTasks,
@@ -176,7 +176,7 @@ export const useClockStore = create<ClockState>((set, get) => ({
       id: `block-${Date.now()}`,
     };
 
-    const updatedBlocks = [...preset.blocks, newBlock];
+    const updatedBlocks = sortRoutineBlocks([...preset.blocks, newBlock]);
     await db.presets.update(presetId, { blocks: updatedBlocks });
     set((state) => ({
       presets: state.presets.map((p) => (p.id === presetId ? { ...p, blocks: updatedBlocks } : p)),
@@ -187,7 +187,9 @@ export const useClockStore = create<ClockState>((set, get) => ({
     const preset = get().presets.find((p) => p.id === presetId);
     if (!preset) return;
 
-    const updatedBlocks = preset.blocks.map((b) => (b.id === blockId ? { ...b, ...updates } : b));
+    const updatedBlocks = sortRoutineBlocks(
+      preset.blocks.map((b) => (b.id === blockId ? { ...b, ...updates } : b))
+    );
     await db.presets.update(presetId, { blocks: updatedBlocks });
     set((state) => ({
       presets: state.presets.map((p) => (p.id === presetId ? { ...p, blocks: updatedBlocks } : p)),

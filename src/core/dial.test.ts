@@ -7,6 +7,7 @@ import {
   checkUpcomingTransition,
   getAutoDayNightMode,
   getActive12hWindow,
+  sortRoutineBlocks,
   type TimeInput,
   type RoutineBlock,
 } from './dial';
@@ -299,9 +300,41 @@ describe('Dial Core - SDD 001 & 002 & 004 & 007 Specification', () => {
         ];
 
         const arcs = weekdayBlocks.flatMap((b) => convertBlockTo12hArcs(b, 8));
-        console.log('WEEKDAY ARCS IN DAY (8):', arcs.map(a => `${a.title}: ${a.startAngle}~${a.endAngle}`));
         expect(arcs.length).toBeGreaterThan(0);
       });
+    });
+  });
+
+  describe('일과 블록 시간순 자동 정렬 sortRoutineBlocks (SDD 011)', () => {
+    it('무작위 순서의 일과 블록들을 시작 시각 오름차순으로 정렬해야 한다', () => {
+      const unsortedBlocks: RoutineBlock[] = [
+        { id: '1', title: '점심', startHour: 12, startMinute: 30, endHour: 13, endMinute: 30, color: '#1' },
+        { id: '2', title: '기상', startHour: 7, startMinute: 0, endHour: 8, endMinute: 0, color: '#2' },
+        { id: '3', title: '야간 독서', startHour: 21, startMinute: 0, endHour: 22, endMinute: 0, color: '#3' },
+        { id: '4', title: '오전 업무', startHour: 9, startMinute: 0, endHour: 11, endMinute: 0, color: '#4' },
+        { id: '5', title: '아침 식사', startHour: 8, startMinute: 0, endHour: 8, endMinute: 30, color: '#5' },
+      ];
+
+      const sorted = sortRoutineBlocks(unsortedBlocks);
+
+      expect(sorted.map((b) => b.title)).toEqual([
+        '기상',        // 07:00
+        '아침 식사',   // 08:00
+        '오전 업무',   // 09:00
+        '점심',        // 12:30
+        '야간 독서',   // 21:00
+      ]);
+    });
+
+    it('시작 시각이 같으면 종료 시각 오름차순으로 정렬해야 한다', () => {
+      const blocks: RoutineBlock[] = [
+        { id: '1', title: '긴 회의', startHour: 10, startMinute: 0, endHour: 12, endMinute: 0, color: '#1' },
+        { id: '2', title: '짧은 스탠드업', startHour: 10, startMinute: 0, endHour: 10, endMinute: 30, color: '#2' },
+      ];
+
+      const sorted = sortRoutineBlocks(blocks);
+      expect(sorted[0].title).toBe('짧은 스탠드업');
+      expect(sorted[1].title).toBe('긴 회의');
     });
   });
 });

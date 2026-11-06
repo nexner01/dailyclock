@@ -32,6 +32,23 @@ export interface ArcSegment {
 }
 
 /**
+ * 일과 블록 목록을 시작 시각 오름차순으로 정렬 (SDD 011)
+ * 시작 시각이 같으면 종료 시각 오름차순으로 정렬
+ */
+export function sortRoutineBlocks(blocks: RoutineBlock[]): RoutineBlock[] {
+  return [...blocks].sort((a, b) => {
+    const aStart = a.startHour * 60 + a.startMinute;
+    const bStart = b.startHour * 60 + b.startMinute;
+    if (aStart !== bStart) {
+      return aStart - bStart;
+    }
+    const aEnd = a.endHour * 60 + a.endMinute;
+    const bEnd = b.endHour * 60 + b.endMinute;
+    return aEnd - bEnd;
+  });
+}
+
+/**
  * 24시간 시침 각도 계산
  * 24시간 = 360도 (1시간 = 15도, 1분 = 0.25도, 1초 = 0.004166...도)
  */

@@ -88,6 +88,15 @@
   - `[🌙 야간]` 선택 시 시작/종료 시각 기본값(`20:00` ~ `23:00`) 추천 및 야간 블록 필터링
   - 등록된 야간 블록이 없을 시 빈 일과표 안내 문구 제공
 
+### 10) 환경설정 일과 블록 폼 연동 수정 및 시간순 자동 정렬 (SDD 011)
+- **블록 선택 시 상단 폼 연동 수정 (Edit Mode)**:
+  - 하단 일과 블록 클릭 시 상단 입력 폼으로 제목, 시작 시각, 종료 시각이 즉시 채워지며 `[✏️ 일과 수정 저장]` 모드로 전환
+  - 선택된 블록의 색상이 상단 색상 팔레트에서 선택 상태(링 강조)로 동기화
+  - 하단 목록에서 현재 수정 중인 블록에 인디고 하이라이트 및 `(수정 중)` 배지 노출
+  - 수정 취소 버튼 제공 및 다른 블록 재클릭 시 선택 토글 처리
+- **시간 순서 자동 정렬 (`sortRoutineBlocks`)**:
+  - 블록 신규 등록 및 수정 저장 시 시작 시각(`startHour * 60 + startMinute`) 오름차순으로 자동 정렬되어 하단 목록 및 시계판에 항상 시간 순서대로 정갈하게 배치
+
 ---
 
 ## 💾 3. 데이터 저장 및 보안 아키텍처 (Storage & Security)
@@ -133,14 +142,15 @@ DailyClock은 서버리스 기반의 **오프라인 우선(Local-First)** 아키
 | [`008`](./docs/design-docs/008-google-auto-sync-spec.md) | 구글 캘린더 화면 활성화 기반 30분 자동 동기화 명세 | Proposed | - |
 | [`009`](./docs/design-docs/009-mobile-optimization-spec.md) | 모바일/PWA 최적화, 바로가기 아이콘 및 미작동 기능 제거 명세 | **Approved** | 위승 (2026-11-05) |
 | [`010`](./docs/design-docs/010-day-night-12h-cycle-spec.md) | 12시간 모드 주간/야간 일과표 선택 및 환경설정 입력 명세 | **Approved** | 위승 (2026-11-06) |
+| [`011`](./docs/design-docs/011-routine-block-form-edit-and-sort.md) | 환경설정 일과 블록 폼 연동 수정 및 시간순 자동 정렬 명세 | **Approved** | 위승 (2026-11-06) |
 
 ---
 
 ## 🧪 5. 테스트 및 품질 지표 (TDD & Taste as Code)
 
 - **테스트 러너**: Vitest v3.2.7 (React Testing Library + JSDOM)
-- **전체 단위/통합 테스트**: **45개 전체 통과 (0건 실패)**
-  - `src/core/dial.test.ts` (26개 테스트): 각도 계산, 12H/24H 좌표 변환, 주간/야간 자동 판별, 야간 윈도우 교차 및 빈값 보장, 자정 래핑, 5초 전환 감지 등
+- **전체 단위/통합 테스트**: **47개 전체 통과 (0건 실패)**
+  - `src/core/dial.test.ts` (28개 테스트): 각도 계산, 12H/24H 좌표 변환, 주간/야간 자동 판별, 야간 윈도우 교차 및 빈값 보장, **일과 블록 시간순 자동 정렬(sortRoutineBlocks)**, 자정 래핑, 5초 전환 감지 등
   - `src/services/googleSync.test.ts` (7개 테스트): Strict Read-Only API 단언, Calendar/Tasks 파서 정확성
   - `src/components/ClockDial.test.tsx` (12개 테스트): 단일 바늘 불변식(초/분침 배제), 중앙 시계, 12H/24H 눈금, 야간 빈값 다이얼 보장, 낮/밤 모드 지정 렌더링, 호버 인터랙션, 터치 탭 토글, 5초 카운트다운 UI
 - **프로덕션 빌드**: `tsc && vite build` 정상 완료 (TypeScript 0 오류)
