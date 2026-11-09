@@ -1,7 +1,7 @@
 # DailyClock 작업 내역 보고서 (Worklog & Implementation History)
 
-**최종 업데이트**: 2026-11-06  
-**버전**: v0.1.1  
+**최종 업데이트**: 2026-11-09  
+**버전**: v0.1.2  
 **GitHub 저장소**: [nexner01/dailyclock (Private)](https://github.com/nexner01/dailyclock)  
 **기술 스택**: React 19, TypeScript, Vite, Tailwind CSS v4, Dexie.js (IndexedDB), Vitest, Lucide-react, Document Picture-in-Picture API  
 
@@ -97,6 +97,15 @@
 - **시간 순서 자동 정렬 (`sortRoutineBlocks`)**:
   - 블록 신규 등록 및 수정 저장 시 시작 시각(`startHour * 60 + startMinute`) 오름차순으로 자동 정렬되어 하단 목록 및 시계판에 항상 시간 순서대로 정갈하게 배치
 
+### 11) 부모 창 종료 시에도 유지되는 독립 팝업 및 PiP 수명주기 분리 (SDD 012)
+- **독립 팝업 윈도우(`window.open` + `?mode=compact`) 신설**:
+  - Chromium/W3C 표준 Document Picture-in-Picture(PiP) API는 브라우저 보안 규격상 부모 탭(Opener)이 닫히면 함께 강제 종료되는 한계가 존재
+  - 부모 브라우저 창을 닫아도 바탕화면에서 절대 닫히지 않고 독립적으로 계속 구동되는 **`[독립 팝업]`** 기능 구현
+  - 팝업 창 전용 컴팩트 모드(`isCompactMode`): 헤더/푸터를 숨기고 다이얼이 창 크기에 맞춰 꽉 차게 렌더링되며, 상단 미니 칩(낮/밤 전환, 환경설정 버튼)을 내장
+- **두 가지 팝업 모드 이원화 제공**:
+  - `[독립 팝업]`: 본체 창을 닫아도 OS/브라우저에서 단독으로 영구 유지되는 독립 미니 창
+  - `[최상단 PiP]`: 다른 작업 창 위에 항상 최상단(Always on Top)으로 고정되는 플로팅 창 (부모 탭 닫힘 방지용 `beforeunload` 경고 탑재)
+
 ---
 
 ## 💾 3. 데이터 저장 및 보안 아키텍처 (Storage & Security)
@@ -143,14 +152,16 @@ DailyClock은 서버리스 기반의 **오프라인 우선(Local-First)** 아키
 | [`009`](./docs/design-docs/009-mobile-optimization-spec.md) | 모바일/PWA 최적화, 바로가기 아이콘 및 미작동 기능 제거 명세 | **Approved** | 위승 (2026-11-05) |
 | [`010`](./docs/design-docs/010-day-night-12h-cycle-spec.md) | 12시간 모드 주간/야간 일과표 선택 및 환경설정 입력 명세 | **Approved** | 위승 (2026-11-06) |
 | [`011`](./docs/design-docs/011-routine-block-form-edit-and-sort.md) | 환경설정 일과 블록 폼 연동 수정 및 시간순 자동 정렬 명세 | **Approved** | 위승 (2026-11-06) |
+| [`012`](./docs/design-docs/012-independent-popup-and-pip-lifecycle-spec.md) | 독립 팝업 및 PiP 수명주기 분리 명세서 | **Approved** | 위승 (2026-11-09) |
 
 ---
 
 ## 🧪 5. 테스트 및 품질 지표 (TDD & Taste as Code)
 
 - **테스트 러너**: Vitest v3.2.7 (React Testing Library + JSDOM)
-- **전체 단위/통합 테스트**: **47개 전체 통과 (0건 실패)**
+- **전체 단위/통합 테스트**: **50개 전체 통과 (0건 실패)**
   - `src/core/dial.test.ts` (28개 테스트): 각도 계산, 12H/24H 좌표 변환, 주간/야간 자동 판별, 야간 윈도우 교차 및 빈값 보장, **일과 블록 시간순 자동 정렬(sortRoutineBlocks)**, 자정 래핑, 5초 전환 감지 등
+  - `src/core/popup.test.ts` (3개 테스트): 독립 팝업 URL 빌더(`buildStandalonePopupUrl`), 쿼리 파라미터 판별(`isCompactModeUrl`)
   - `src/services/googleSync.test.ts` (7개 테스트): Strict Read-Only API 단언, Calendar/Tasks 파서 정확성
   - `src/components/ClockDial.test.tsx` (12개 테스트): 단일 바늘 불변식(초/분침 배제), 중앙 시계, 12H/24H 눈금, 야간 빈값 다이얼 보장, 낮/밤 모드 지정 렌더링, 호버 인터랙션, 터치 탭 토글, 5초 카운트다운 UI
 - **프로덕션 빌드**: `tsc && vite build` 정상 완료 (TypeScript 0 오류)

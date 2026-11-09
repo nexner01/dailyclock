@@ -13,8 +13,10 @@ import {
   Settings,
   RotateCcw,
   ExternalLink,
+  Layers,
 } from 'lucide-react';
 import { getAutoDayNightMode, type DayNightMode } from './core/dial';
+import { isCompactModeUrl, openStandalonePopup } from './core/popup';
 
 export const App: React.FC = () => {
   const {
@@ -31,6 +33,12 @@ export const App: React.FC = () => {
     resetToDefaultPresets,
   } = useClockStore();
 
+  // SDD 012: 부모 창 닫아도 유지되는 독립 팝업(컴팩트) 모드 판별
+  const isCompactMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return isCompactModeUrl(window.location.search);
+  }, []);
+
   // F1 단축키 콜백 등록을 포함한 Document PiP(최상단 플로팅 팝업) 훅
   const { isSupported, isPiPActive, pipWindow, requestPiP, closePiP } = useDocumentPiP({
     width: 360,
@@ -39,6 +47,20 @@ export const App: React.FC = () => {
       setIsSettingsOpen(true);
     },
   });
+
+  // PiP 활성화 상태에서 부모 탭 닫힘 실수 방지 안내 (SDD 012)
+  useEffect(() => {
+    if (!isPiPActive) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '부모 브라우저 탭을 닫으면 항상 최상단 PiP 창도 함께 닫힙니다. 본체 탭을 최소화해 두세요.';
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isPiPActive]);
 
   // 12시간 모드 주간/야간 수동 선택 상태 (기본값 null: 시간대 기반 자동)
   const [manualDayNight, setManualDayNight] = useState<DayNightMode | null>(null);
@@ -110,6 +132,75 @@ export const App: React.FC = () => {
     });
   }, [blocks, currentTime]);
 
+  // SDD 012: 부모 창을 닫아도 유지되는 독립 팝업 윈도우 컴팩트 뷰
+  if (isCompactMode) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-between p-2 select-none font-sans overflow-hidden">
+        {/* 상단 미니 바: 낮/밤 선택 & 프리셋 & 설정 */}
+        <div className="w-full flex items-center justify-between px-2 pt-1">
+          {settings.dialMode === '12h' ? (
+            <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 p-0.5 rounded-full shadow">
+              <button
+                onClick={() => setManualDayNight('day')}
+                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                  activeDayNight === 'day'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="낮 일과표 보기"
+              >
+                <Sun className="w-3 h-3 text-amber-400" />
+                <span>낮</span>
+              </button>
+              <button
+                onClick={() => setManualDayNight('night')}
+                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                  activeDayNight === 'night'
+                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="밤 일과표 보기"
+              >
+                <Moon className="w-3 h-3 text-indigo-400" />
+                <span>밤</span>
+              </button>
+            </div>
+          ) : (
+            <span className="text-[11px] text-slate-400 font-medium">24H 전체 일과</span>
+          )}
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400 truncate max-w-[120px]">
+              {currentPreset?.name}
+            </span>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+              title="환경설정 열기 (F1)"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* 꽉 차는 원형 다이얼 차트 */}
+        <div className="flex-1 w-full max-w-[min(90vw,360px)] aspect-square flex items-center justify-center relative p-1 my-auto">
+          <ClockDial
+            currentTime={currentTime}
+            blocks={blocks}
+            className="w-full h-full max-w-full max-h-full"
+            dialMode={settings.dialMode}
+            twelveHourStart={settings.twelveHourStart}
+            dayNightMode={activeDayNight}
+          />
+        </div>
+
+        {/* 환경설정 모달 */}
+        <SettingsModal />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-between p-4 sm:p-6 select-none font-sans">
       {/* 상단 네비게이션 헤더 */}
@@ -126,21 +217,31 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* 액션 버튼: 12H / 24H 모드, 일과표 팝업(PiP), 환경설정 */}
+        {/* 액션 버튼: 독립 팝업, 최상단 PiP, 12H/24H 모드, 환경설정 */}
         <div className="flex items-center gap-2">
-          {/* Always on Top 일과표 플로팅 팝업 버튼 */}
+          {/* 1. 부모 창 닫아도 유지되는 독립 팝업 버튼 (SDD 012) */}
+          <button
+            onClick={() => openStandalonePopup()}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-600/30"
+            title="본체 브라우저를 닫아도 닫히지 않고 계속 작동하는 독립 팝업 창 열기"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>독립 팝업</span>
+          </button>
+
+          {/* 2. 화면 항상 최상단 고정 플로팅 뷰 (Document PiP) 버튼 */}
           {isSupported && (
             <button
               onClick={isPiPActive ? closePiP : requestPiP}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
                 isPiPActive
                   ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 hover:bg-rose-500/30'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
+                  : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200'
               }`}
-              title="화면 어디서든 항상 위에 뜨는 일과표 전용 팝업 열기"
+              title="화면 맨 위에 항상 고정(Always on Top)되는 플로팅 뷰 열기 (본체 탭 최소화 권장)"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>{isPiPActive ? '팝업 닫기' : '일과표 팝업'}</span>
+              <Layers className="w-3.5 h-3.5 text-indigo-400" />
+              <span>{isPiPActive ? '최상단 닫기' : '최상단 PiP'}</span>
             </button>
           )}
 
